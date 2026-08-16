@@ -118,10 +118,31 @@
 
   /* ---------- Einträge ---------- */
   .eintrag {
-    width: 100%; text-align: left; border: 2px solid var(--rand); background: var(--karte);
-    border-radius: var(--radius); padding: 13px 15px; margin-bottom: 9px; color: var(--text);
+    display: flex; align-items: stretch; border: 2px solid var(--rand);
+    background: var(--karte); border-radius: var(--radius);
+    margin-bottom: 9px; overflow: hidden;
   }
   .eintrag:hover { border-color: var(--text); }
+  .eintrag-haupt {
+    flex: 1; min-width: 0; text-align: left; border: none; background: none;
+    padding: 13px 15px; color: var(--text); font-size: 1em;
+  }
+  .loeschen {
+    border: none; border-left: 2px solid var(--rand-hell); background: none;
+    color: var(--gedaempft); padding: 0 15px; font-size: .82em; white-space: nowrap;
+  }
+  .loeschen:hover { background: var(--akzent-hg); color: var(--akzent); }
+  .eintrag.fragt { border-color: var(--akzent); background: var(--akzent-hg); }
+  .fragezeile {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 15px; width: 100%; font-size: .9em;
+  }
+  .fragezeile .txt { flex: 1; min-width: 170px; }
+  .klein {
+    padding: 9px 15px; font-size: .9em; border-radius: 8px;
+    border: 2px solid var(--text); background: var(--karte); color: var(--text);
+  }
+  .klein.gefahr { background: var(--akzent); border-color: var(--akzent); color: #fff; font-weight: 700; }
   .eintrag .kopf { display: flex; justify-content: space-between; gap: 10px;
                    font-size: .78em; color: var(--gedaempft); margin-bottom: 3px; }
   .eintrag .vor { font-size: .93em; line-height: 1.45;
@@ -271,6 +292,19 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
 
     <button class="knopf stark voll" id="editorSpeichern" style="margin-top:14px">Änderungen speichern</button>
     <div id="editorMeldung" class="meldung versteckt"></div>
+
+    <div id="loeschbereich" style="margin-top:26px; padding-top:18px; border-top:2px solid var(--rand-hell)">
+      <button class="knopf leise voll" id="editorLoeschen">Diesen Eintrag löschen</button>
+      <div id="loeschFrage" class="meldung err versteckt">
+        <b>Wirklich löschen?</b>
+        Der Eintrag verschwindet aus dem Tagebuch. Über die Versionshistorie von GitHub
+        lässt er sich später noch zurückholen.
+        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
+          <button class="klein" id="loeschNein">Abbrechen</button>
+          <button class="klein gefahr" id="loeschJa">Ja, löschen</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -408,6 +442,12 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
         inhalte[pfad] = { text: ausB64(d.content || ""), sha: d.sha };
         return inhalte[pfad];
       });
+  }
+
+  function dateiEntfernen(pfad, sha) {
+    return api("/contents/" + pfad.split("/").map(encodeURIComponent).join("/"),
+      { method: "DELETE",
+        body: JSON.stringify({ message: "Eintrag geloescht: " + pfad, sha: sha }) });
   }
 
   function dateiSchreiben(pfad, text, sha, nachricht) {
@@ -636,25 +676,77 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
     monat = new Date(monat.getFullYear(), monat.getMonth() + 1, 1); zeichneKalender();
   });
 
-  function eintragKnopf(e, mitVorschau) {
-    var b = document.createElement("button");
-    b.className = "eintrag";
+  function eintragZeile(e, mitVorschau) {
+    var reihe = document.createElement("div");
+    reihe.className = "eintrag";
+
     var marke = e.quelle === "inbox"
       ? "<span class='marke roh'>noch nicht aufgeräumt</span>"
       : "<span class='marke'>aufgeräumt</span>";
-    b.innerHTML = "<div class='kopf'><span>" + lesbaresDatum(e.datum) + "</span>" + marke + "</div>" +
-                  "<div class='vor' data-vor>" + (mitVorschau ? "…" : e.pfad.split("/").pop()) + "</div>";
-    b.addEventListener("click", function () { editorOeffnen(e); });
+
+    var haupt = document.createElement("button");
+    haupt.className = "eintrag-haupt";
+    haupt.innerHTML = "<div class='kopf'><span>" + lesbaresDatum(e.datum) + "</span>" + marke + "</div>" +
+                      "<div class='vor' data-vor>" + (mitVorschau ? "…" : e.pfad.split("/").pop()) + "</div>";
+    haupt.addEventListener("click", function () { editorOeffnen(e); });
+
+    var weg = document.createElement("button");
+    weg.className = "loeschen";
+    weg.textContent = "Löschen";
+    weg.setAttribute("aria-label", "Eintrag vom " + lesbaresDatum(e.datum) + " löschen");
+    weg.addEventListener("click", function () { fragenObLoeschen(reihe, e); });
+
+    reihe.appendChild(haupt);
+    reihe.appendChild(weg);
+
     if (mitVorschau) {
       dateiLaden(e.pfad).then(function (d) {
-        var el = b.querySelector("[data-vor]");
+        var el = reihe.querySelector("[data-vor]");
         if (el) el.textContent = vorschau(d.text);
       }).catch(function () {
-        var el = b.querySelector("[data-vor]");
+        var el = reihe.querySelector("[data-vor]");
         if (el) el.textContent = "(konnte nicht geladen werden)";
       });
     }
-    return b;
+    return reihe;
+  }
+
+  function fragenObLoeschen(reihe, e) {
+    reihe.classList.add("fragt");
+    reihe.innerHTML =
+      "<div class='fragezeile'>" +
+        "<span class='txt'><b>Diesen Eintrag löschen?</b><br>" + lesbaresDatum(e.datum) + "</span>" +
+        "<button class='klein' data-nein>Abbrechen</button>" +
+        "<button class='klein gefahr' data-ja>Ja, löschen</button>" +
+      "</div>";
+
+    reihe.querySelector("[data-nein]").addEventListener("click", function () {
+      var neu = eintragZeile(e, true);
+      reihe.replaceWith(neu);
+      neu.querySelector(".loeschen").focus();
+    });
+
+    reihe.querySelector("[data-ja]").addEventListener("click", function () {
+      var knopf = this;
+      knopf.disabled = true; knopf.textContent = "Wird gelöscht …";
+      eintragLoeschen(e).then(function () {
+        reihe.remove();
+      }).catch(function (err) {
+        reihe.querySelector(".txt").innerHTML =
+          "<b>Nicht gelöscht.</b><br>" + err.message;
+        knopf.disabled = false; knopf.textContent = "Noch einmal versuchen";
+      });
+    });
+    reihe.querySelector("[data-nein]").focus();
+  }
+
+  function eintragLoeschen(e) {
+    var sha = (inhalte[e.pfad] || {}).sha || e.sha;
+    return dateiEntfernen(e.pfad, sha).then(function () {
+      delete inhalte[e.pfad];
+      eintraege = eintraege.filter(function (x) { return x.pfad !== e.pfad; });
+      zeichneKalender();
+    });
   }
 
   function lesbaresDatum(iso) {
@@ -678,7 +770,7 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
       ziel.innerHTML += "<p class='leerhinweis'>An diesem Tag gibt es keinen Eintrag.</p>";
       return;
     }
-    liste.forEach(function (e) { ziel.appendChild(eintragKnopf(e, true)); });
+    liste.forEach(function (e) { ziel.appendChild(eintragZeile(e, true)); });
   }
 
   /* ================= Ansicht: Liste ================= */
@@ -698,7 +790,7 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
         tr.textContent = MONATE[+m.slice(5, 7) - 1] + " " + m.slice(0, 4);
         ziel.appendChild(tr);
       }
-      ziel.appendChild(eintragKnopf(e, false));
+      ziel.appendChild(eintragZeile(e, false));
     });
   }
 
@@ -718,6 +810,8 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
   function editorOeffnen(e) {
     offen = e;
     stumm(eMeldung);
+    bergen($("loeschFrage"));
+    zeigen($("editorLoeschen"));
     $("editorPfad").textContent = e.pfad;
     bText.value = "";
     bText.disabled = true;
@@ -804,6 +898,32 @@ Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
           e.message + "<br><br><b>Dein Text steht weiter im Feld.</b> Kopier ihn zur Sicherheit heraus, bevor du das Fenster schließt.");
       })
       .then(function () { knopf.disabled = false; knopf.textContent = "Änderungen speichern"; });
+  });
+
+  /* ---- Löschen aus dem Editor heraus ---- */
+  $("editorLoeschen").addEventListener("click", function () {
+    bergen($("editorLoeschen"));
+    zeigen($("loeschFrage"));
+    $("loeschNein").focus();
+  });
+  $("loeschNein").addEventListener("click", function () {
+    bergen($("loeschFrage"));
+    zeigen($("editorLoeschen"));
+    $("editorLoeschen").focus();
+  });
+  $("loeschJa").addEventListener("click", function () {
+    if (!offen) return;
+    var knopf = this;
+    knopf.disabled = true; knopf.textContent = "Wird gelöscht …";
+    eintragLoeschen(offen).then(function () {
+      editorSchliessen();
+      zeichneTagesliste(); zeichneListe();
+    }).catch(function (e) {
+      melde(eMeldung, "err", "Nicht gelöscht", e.message);
+      bergen($("loeschFrage")); zeigen($("editorLoeschen"));
+    }).then(function () {
+      knopf.disabled = false; knopf.textContent = "Ja, löschen";
+    });
   });
 
   /* ================= Reiter ================= */
