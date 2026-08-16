@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tagebuch</title>
+
+<!-- Damit sich die Seite wie eine App auf den Startbildschirm legen laesst -->
+<meta name="theme-color" content="#8a3a12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tagebuch">
+<meta name="description" content="Sprach-Tagebuch: aufnehmen, nachlesen, ergänzen.">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root {
+    --text:      #1a1a1a;
+    --gedaempft: #635f59;
+    --rand:      #d8d4cd;
+    --rand-hell: #e9e5df;
+    --papier:    #fbfaf8;
+    --karte:     #ffffff;
+    --akzent:    #8a3a12;
+    --akzent-hg: #fbf0ea;
+    --gruen:     #1a5c33;
+    --gruen-hg:  #eaf3ed;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Carlito", sans-serif;
+    font-size: 17px; line-height: 1.55;
+    color: var(--text); background: var(--papier);
+    padding: 20px 16px 80px;
+  }
+  .huelle { max-width: 760px; margin: 0 auto; }
+
+  h1 { font-size: 1.45em; margin: 0 0 3px; letter-spacing: -0.3px; }
+  .unter { color: var(--gedaempft); font-size: .82em; margin: 0 0 18px; }
+  h2 { font-size: 1.05em; margin: 0 0 10px; }
+
+  button { font-family: inherit; font-size: 1em; cursor: pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--akzent); outline-offset: 2px;
+  }
+  .knopf {
+    border: 2px solid var(--text); background: var(--karte); color: var(--text);
+    border-radius: var(--radius); padding: 13px 18px;
+  }
+  .knopf:disabled { opacity: .45; cursor: not-allowed; }
+  .knopf.voll { width: 100%; }
+  .knopf.stark { background: var(--text); color: #fff; font-weight: 700; }
+  .knopf.stark:disabled { background: #b3aea7; border-color: #b3aea7; color: #fff; }
+  .knopf.leise { border-color: var(--rand); color: var(--gedaempft); }
+  .verlinkt {
+    background: none; border: none; padding: 0; color: var(--gedaempft);
+    text-decoration: underline; font-size: .85em;
+  }
+
+  /* ---------- Reiter ---------- */
+  .reiter { display: flex; gap: 6px; margin-bottom: 18px; border-bottom: 2px solid var(--rand-hell); }
+  .reiter button {
+    border: none; background: none; padding: 10px 14px; color: var(--gedaempft);
+    border-bottom: 3px solid transparent; margin-bottom: -2px; font-size: .95em;
+  }
+  .reiter button[aria-selected="true"] { color: var(--text); font-weight: 700; border-bottom-color: var(--akzent); }
+
+  /* ---------- Aufnehmen ---------- */
+  #aufnahme { width: 100%; padding: 24px; font-size: 1.2em; font-weight: 700;
+              display: flex; align-items: center; justify-content: center; gap: 13px; margin-bottom: 14px; }
+  #aufnahme.laeuft { background: var(--akzent); border-color: var(--akzent); color: #fff; }
+  .punkt { width: 15px; height: 15px; border-radius: 50%; background: var(--akzent); flex: 0 0 auto; }
+  #aufnahme.laeuft .punkt { background: #fff; animation: puls 1.3s ease-in-out infinite; }
+  @keyframes puls { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+  @media (prefers-reduced-motion: reduce) { #aufnahme.laeuft .punkt { animation: none } }
+
+  textarea {
+    width: 100%; padding: 15px; font-family: inherit; font-size: 1em; line-height: 1.6;
+    border: 2px solid var(--rand); border-radius: var(--radius);
+    background: var(--karte); color: var(--text); resize: vertical;
+  }
+  textarea:focus { border-color: var(--text); }
+  #text { min-height: 230px; }
+  #bearbeitenText { min-height: 300px; font-size: .96em; }
+
+  .zeile { display: flex; justify-content: space-between; align-items: baseline;
+           font-size: .78em; color: var(--gedaempft); margin: 7px 2px 0; gap: 12px; }
+
+  /* ---------- Meldungen ---------- */
+  .meldung { margin-top: 14px; padding: 14px 16px; border-radius: var(--radius);
+             border-left: 5px solid var(--gedaempft); background: #f2f0ec; font-size: .92em; }
+  .meldung.ok  { border-color: var(--gruen);  background: var(--gruen-hg); }
+  .meldung.err { border-color: var(--akzent); background: var(--akzent-hg); }
+  .meldung b { display: block; margin-bottom: 3px; }
+  .meldung code { font-size: .9em; }
+
+  /* ---------- Kalender ---------- */
+  .monatskopf { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .monatskopf .name { font-weight: 700; font-size: 1.05em; }
+  .monatskopf button { border: 2px solid var(--rand); background: var(--karte);
+                       border-radius: 8px; width: 40px; height: 40px; color: var(--text); }
+  .gitter { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .wtag { text-align: center; font-size: .72em; color: var(--gedaempft); padding-bottom: 4px; font-weight: 700; }
+  .tag {
+    aspect-ratio: 1; border: 2px solid var(--rand-hell); background: var(--karte);
+    border-radius: 8px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 3px; color: var(--text); font-size: .95em; padding: 0;
+  }
+  .tag.leer { border: none; background: none; cursor: default; }
+  .tag.heute { border-color: var(--text); }
+  .tag.hat { background: var(--akzent-hg); border-color: var(--akzent); font-weight: 700; }
+  .tag[aria-pressed="true"] { background: var(--akzent); border-color: var(--akzent); color: #fff; }
+  .tag .zahl { font-size: .62em; font-weight: 400; }
+  .tag[aria-pressed="true"] .zahl { color: #fff; }
+
+  /* ---------- Einträge ---------- */
+  .eintrag {
+    width: 100%; text-align: left; border: 2px solid var(--rand); background: var(--karte);
+    border-radius: var(--radius); padding: 13px 15px; margin-bottom: 9px; color: var(--text);
+  }
+  .eintrag:hover { border-color: var(--text); }
+  .eintrag .kopf { display: flex; justify-content: space-between; gap: 10px;
+                   font-size: .78em; color: var(--gedaempft); margin-bottom: 3px; }
+  .eintrag .vor { font-size: .93em; line-height: 1.45;
+                  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .marke { font-size: .72em; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--rand);
+           color: var(--gedaempft); white-space: nowrap; }
+  .marke.roh { border-color: var(--akzent); color: var(--akzent); }
+  .monatstrenner { font-size: .8em; color: var(--gedaempft); font-weight: 700;
+                   margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .leerhinweis { color: var(--gedaempft); font-size: .9em; padding: 22px 0; text-align: center; }
+
+  /* ---------- Editor ---------- */
+  #editor { position: fixed; inset: 0; background: var(--papier); overflow-y: auto;
+            padding: 18px 16px 90px; z-index: 20; }
+  #editor .huelle { max-width: 760px; }
+  .editorkopf { display: flex; justify-content: space-between; align-items: flex-start;
+                gap: 12px; margin-bottom: 14px; }
+  .pfad { font-size: .74em; color: var(--gedaempft); word-break: break-all; }
+  .werkzeuge { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .werkzeuge .knopf { padding: 11px 15px; font-size: .92em; }
+
+  /* ---------- Einstellungen ---------- */
+  .karte { border: 2px solid var(--rand); border-radius: var(--radius);
+           background: var(--karte); padding: 20px; margin-top: 26px; }
+  label { display: block; font-size: .8em; font-weight: 700; margin: 13px 0 4px; }
+  input { width: 100%; padding: 11px 13px; font-family: inherit; font-size: .95em;
+          border: 2px solid var(--rand); border-radius: 8px; background: var(--karte); color: var(--text); }
+  input:focus { border-color: var(--text); }
+  .hinweis { font-size: .8em; color: var(--gedaempft); margin: 0 0 10px; }
+  .warnkasten { margin-top: 14px; padding: 12px 14px; border-radius: 8px;
+                background: var(--akzent-hg); border-left: 5px solid var(--akzent); font-size: .82em; }
+  .fuss { margin-top: 28px; font-size: .76em; color: var(--gedaempft); line-height: 1.6; }
+  .versteckt { display: none !important; }
+  .lade { color: var(--gedaempft); font-size: .9em; padding: 22px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="huelle">
+
+  <h1>Tagebuch</h1>
+  <p class="unter">Sprechen, nachlesen, ergänzen.</p>
+
+  <div id="dateiwarnung" class="meldung err versteckt">
+    <b>Diese Seite ist als Datei geöffnet</b>
+    In diesem Zustand verweigert der Browser Mikrofon und Datenverkehr, die Mikrofonabfrage
+    kommt endlos wieder. Das liegt nicht an dir, eine Seite ohne Adresse bekommt keine Rechte.
+    <br><br>
+    <b>Lösung:</b> Die Seite einmal über GitHub Pages veröffentlichen, dann hat sie eine feste
+    Adresse und lässt sich als Symbol auf den Startbildschirm legen. Kein Server, nichts zu
+    starten. Schritt für Schritt in <b>Anleitung 07</b>, Abschnitt „Einmal veröffentlichen".
+  </div>
+
+  <div class="reiter" role="tablist" aria-label="Ansichten">
+    <button role="tab" id="r-aufnehmen" aria-controls="a-aufnehmen" aria-selected="true">Aufnehmen</button>
+    <button role="tab" id="r-kalender"  aria-controls="a-kalender"  aria-selected="false">Kalender</button>
+    <button role="tab" id="r-liste"     aria-controls="a-liste"     aria-selected="false">Liste</button>
+  </div>
+
+  <!-- ============ Aufnehmen ============ -->
+  <section id="a-aufnehmen" role="tabpanel" aria-labelledby="r-aufnehmen">
+    <button id="aufnahme" class="knopf"><span class="punkt"></span><span id="aufnahmeText">Aufnahme starten</span></button>
+
+    <label class="versteckt" for="text">Text des Eintrags</label>
+    <textarea id="text" placeholder="Hier erscheint, was du sagst.
+
+Du kannst auch direkt hineintippen oder das Diktat deines Geräts benutzen:
+Windows: Windows-Taste + H · Mac: Steuerungstaste zweimal drücken"></textarea>
+
+    <div class="zeile">
+      <span id="zaehler">0 Wörter</span>
+      <button class="verlinkt" id="leeren">Text löschen</button>
+    </div>
+
+    <button id="senden" class="knopf stark voll" style="margin-top:12px">Ins Tagebuch speichern</button>
+    <div id="meldung" class="meldung versteckt"></div>
+    <button id="notausgang" class="knopf voll versteckt" style="margin-top:10px">Text kopieren und GitHub öffnen</button>
+  </section>
+
+  <!-- ============ Kalender ============ -->
+  <section id="a-kalender" role="tabpanel" aria-labelledby="r-kalender" class="versteckt">
+    <div class="monatskopf">
+      <button id="monatZurueck" aria-label="Voriger Monat">‹</button>
+      <span class="name" id="monatName">…</span>
+      <button id="monatVor" aria-label="Nächster Monat">›</button>
+    </div>
+    <div class="gitter" id="wochentage" aria-hidden="true"></div>
+    <div class="gitter" id="kalender" role="group" aria-label="Tage des Monats"></div>
+    <div id="tagesliste" style="margin-top:22px"></div>
+  </section>
+
+  <!-- ============ Liste ============ -->
+  <section id="a-liste" role="tabpanel" aria-labelledby="r-liste" class="versteckt">
+    <div id="volleListe"></div>
+  </section>
+
+  <!-- ============ Einstellungen ============ -->
+  <div class="karte" id="einstellungen">
+    <h2>Einstellungen</h2>
+    <p class="hinweis">Einmal ausfüllen. Bleibt in diesem Browser und wird nirgendwo hingeschickt.</p>
+
+    <label for="benutzer">GitHub-Benutzername</label>
+    <input id="benutzer" placeholder="danielgirster" autocomplete="off" spellcheck="false">
+
+    <label for="repo">Repo-Name</label>
+    <input id="repo" placeholder="mama-buch" autocomplete="off" spellcheck="false">
+
+    <label for="token">Token</label>
+    <input id="token" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false">
+
+    <div class="warnkasten">
+      <strong>Wichtig:</strong> Der Token wird nur in diesem Browser gespeichert, nicht in der Datei.
+      Trag ihn niemals oben im Abschnitt KONFIG ein, wenn die Seite öffentlich erreichbar ist.
+    </div>
+
+    <button id="speichern" class="knopf voll" style="margin-top:16px">Einstellungen sichern</button>
+  </div>
+
+  <p class="fuss">
+    Der Text im Aufnahmefeld wird beim Tippen zwischengespeichert. Schließt du das Fenster
+    versehentlich, steht er beim nächsten Öffnen wieder da.
+    <br><button class="verlinkt" id="umschalten" style="margin-top:6px">Einstellungen anzeigen</button>
+  </p>
+</div>
+
+<!-- ============ Editor ============ -->
+<div id="editor" class="versteckt" role="dialog" aria-modal="true" aria-labelledby="editorTitel">
+  <div class="huelle">
+    <div class="editorkopf">
+      <div>
+        <h2 id="editorTitel" style="margin:0">Eintrag bearbeiten</h2>
+        <div class="pfad" id="editorPfad"></div>
+      </div>
+      <button class="knopf leise" id="editorZu">Schließen</button>
+    </div>
+
+    <div id="editorHinweis" class="meldung versteckt" style="margin-bottom:14px"></div>
+
+    <label class="versteckt" for="bearbeitenText">Inhalt des Eintrags</label>
+    <textarea id="bearbeitenText"></textarea>
+
+    <div class="zeile"><span id="editorZaehler"></span></div>
+
+    <div class="werkzeuge">
+      <button class="knopf" id="nachtragKnopf"><span class="punkt"></span> Per Sprache ergänzen</button>
+      <button class="knopf" id="einfuegenKnopf">Zeitstempel einfügen</button>
+    </div>
+
+    <button class="knopf stark voll" id="editorSpeichern" style="margin-top:14px">Änderungen speichern</button>
+    <div id="editorMeldung" class="meldung versteckt"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Wer die Angaben fest hinterlegen will, traegt sie hier ein.
+  // Dann gilt: Datei niemals oeffentlich erreichbar machen.
+  var KONFIG = { benutzer: "", repo: "", token: "" };
+
+  var SPEICHER = "tagebuch-konfig", ENTWURF = "tagebuch-entwurf";
+  var MONATE = ["Januar","Februar","März","April","Mai","Juni",
+                "Juli","August","September","Oktober","November","Dezember"];
+  var WTAGE = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var zeigen  = function (el) { el.classList.remove("versteckt"); };
+  var bergen  = function (el) { el.classList.add("versteckt"); };
+
+  var eintraege = [];        // {pfad, sha, groesse, datum, quelle}
+  var inhalte = {};          // pfad -> {text, sha}
+  var zweig = "main";
+  var monat = new Date();
+  var gewaehlterTag = null;
+  var offen = null;          // gerade bearbeiteter Eintrag
+
+  /* ================= Ablage ================= */
+  var ablage = (function () {
+    try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); return localStorage; }
+    catch (e) {
+      var m = {};
+      return { getItem:function(k){return k in m?m[k]:null;},
+               setItem:function(k,v){m[k]=String(v);},
+               removeItem:function(k){delete m[k];}, _fluechtig:true };
+    }
+  })();
+
+  function konfigLesen() {
+    if (KONFIG.benutzer && KONFIG.repo && KONFIG.token) return KONFIG;
+    try { return JSON.parse(ablage.getItem(SPEICHER)) || {}; } catch (e) { return {}; }
+  }
+  function konfigOk(k) { return !!(k && k.benutzer && k.repo && k.token); }
+
+  /* ================= Meldungen ================= */
+  function melde(el, art, titel, rest) {
+    el.className = "meldung " + art;
+    el.innerHTML = "<b>" + titel + "</b>" + (rest || "");
+  }
+  function stumm(el) { el.className = "meldung versteckt"; el.innerHTML = ""; }
+
+  /* ================= Kodierung ================= */
+  function ausB64(s) {
+    var roh = atob(String(s).replace(/\s/g, ""));
+    var bytes = new Uint8Array(roh.length);
+    for (var i = 0; i < roh.length; i++) bytes[i] = roh.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  function nachB64(s) {
+    var bytes = new TextEncoder().encode(s), roh = "";
+    for (var i = 0; i < bytes.length; i++) roh += String.fromCharCode(bytes[i]);
+    return btoa(roh);
+  }
+
+  /* ================= GitHub ================= */
+  function api(pfad, opts) {
+    opts = opts || {};
+    var k = konfigLesen();
+    if (!konfigOk(k)) return Promise.reject(fehler("Einstellungen fehlen. Trag Benutzername, Repo und Token ein.", 0));
+    var url = "https://api.github.com/repos/" + encodeURIComponent(k.benutzer) +
+              "/" + encodeURIComponent(k.repo) + pfad;
+    var kopf = { "Authorization": "Bearer " + k.token, "Accept": "application/vnd.github+json" };
+    if (opts.body) kopf["Content-Type"] = "application/json";
+    return fetch(url, { method: opts.method || "GET", headers: kopf, body: opts.body })
+      .then(function (a) {
+        return a.json().catch(function () { return {}; }).then(function (d) {
+          if (a.ok) return d;
+          throw fehler(deutung(a.status, d), a.status);
+        });
+      })
+      .catch(function (e) {
+        if (e && e.istFehler) throw e;
+        throw fehler(location.protocol === "file:"
+          ? "Der Browser blockiert den Zugriff, weil die Seite als Datei geöffnet ist. Siehe Hinweis ganz oben."
+          : "Keine Verbindung zu GitHub. Bist du online?", 0);
+      });
+  }
+  function fehler(text, code) { var e = new Error(text); e.istFehler = true; e.code = code; return e; }
+  function deutung(code, d) {
+    if (code === 401) return "Der Token stimmt nicht oder ist abgelaufen. Bitte in den Einstellungen erneuern.";
+    if (code === 403) return "Der Token darf hier nicht schreiben. Er braucht <b>Contents: Read and write</b>.";
+    if (code === 404) return "Benutzername oder Repo-Name stimmt nicht, oder das Repo gibt es auf GitHub noch nicht.";
+    if (code === 409) return "Die Datei wurde zwischenzeitlich geändert. Bitte neu laden und noch einmal versuchen.";
+    return (d && d.message) ? d.message : ("Unerwarteter Fehler (" + code + ").");
+  }
+
+  function zweigKlaeren() {
+    if (zweig !== "main") return Promise.resolve(zweig);
+    return api("").then(function (d) { zweig = d.default_branch || "main"; return zweig; })
+                  .catch(function () { return zweig; });
+  }
+
+  function datumAus(pfad) {
+    var m = pfad.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[1] + "-" + m[2] + "-" + m[3] : null;
+  }
+
+  function eintraegeLaden() {
+    return zweigKlaeren().then(function () {
+      return api("/git/trees/" + encodeURIComponent(zweig) + "?recursive=1");
+    }).then(function (baum) {
+      eintraege = (baum.tree || []).filter(function (n) {
+        return n.type === "blob" && /\.md$/i.test(n.path)
+            && (n.path.indexOf("inbox/") === 0 || n.path.indexOf("tagebuch/") === 0)
+            && !/README\.md$/i.test(n.path)
+            && !/(^|\/)_/.test(n.path);
+      }).map(function (n) {
+        return { pfad: n.path, sha: n.sha, groesse: n.size || 0,
+                 datum: datumAus(n.path),
+                 quelle: n.path.indexOf("inbox/") === 0 ? "inbox" : "tagebuch" };
+      }).filter(function (e) { return e.datum; });
+
+      eintraege.sort(function (a, b) {
+        return b.datum.localeCompare(a.datum) || b.pfad.localeCompare(a.pfad);
+      });
+      return eintraege;
+    });
+  }
+
+  function dateiLaden(pfad) {
+    if (inhalte[pfad]) return Promise.resolve(inhalte[pfad]);
+    return api("/contents/" + pfad.split("/").map(encodeURIComponent).join("/") +
+               "?ref=" + encodeURIComponent(zweig))
+      .then(function (d) {
+        inhalte[pfad] = { text: ausB64(d.content || ""), sha: d.sha };
+        return inhalte[pfad];
+      });
+  }
+
+  function dateiSchreiben(pfad, text, sha, nachricht) {
+    var koerper = { message: nachricht, content: nachB64(text) };
+    if (sha) koerper.sha = sha;
+    return api("/contents/" + pfad.split("/").map(encodeURIComponent).join("/"),
+               { method: "PUT", body: JSON.stringify(koerper) })
+      .then(function (d) {
+        var neuerSha = d && d.content ? d.content.sha : null;
+        inhalte[pfad] = { text: text, sha: neuerSha };
+        return d;
+      });
+  }
+
+  /* ================= Diktat ================= */
+  var Erkenner = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function Diktat(feld, knopf, beschriftung, beiFehler) {
+    var laeuft = false, gewollt = false, erk = null, fest = "";
+
+    function anzeigen(an) {
+      knopf.classList.toggle("laeuft", an);
+      if (beschriftung) beschriftung.textContent = an ? "Ich höre zu, zum Beenden tippen" : knopf.dataset.ruhe;
+    }
+    function starte() {
+      erk = new Erkenner();
+      erk.lang = "de-DE"; erk.continuous = true; erk.interimResults = true;
+      erk.onstart = function () { laeuft = true; anzeigen(true); };
+      erk.onresult = function (ev) {
+        var vor = "";
+        for (var i = ev.resultIndex; i < ev.results.length; i++) {
+          var s = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) fest += s.trim() + " "; else vor += s;
+        }
+        feld.value = (fest + vor).replace(/[ \t]+/g, " ");
+        feld.scrollTop = feld.scrollHeight;
+        feld.dispatchEvent(new Event("input"));
+      };
+      erk.onerror = function (ev) {
+        if (ev.error === "no-speech" || ev.error === "aborted") return;
+        gewollt = false;
+        if (beiFehler) beiFehler(ev.error);
+      };
+      erk.onend = function () {
+        if (gewollt) { try { erk.start(); return; } catch (e) {} }
+        laeuft = false; anzeigen(false);
+      };
+      fest = feld.value ? feld.value.replace(/\s+$/, "") + " " : "";
+      gewollt = true;
+      try { erk.start(); } catch (e) { gewollt = false; if (beiFehler) beiFehler("start"); }
+    }
+    this.umschalten = function () { if (laeuft) { gewollt = false; erk.stop(); } else starte(); };
+    this.stoppen = function () { if (laeuft) { gewollt = false; erk.stop(); } };
+    this.laeuft = function () { return laeuft; };
+  }
+
+  function diktatFehler(ziel) {
+    return function (art) {
+      var t = art === "not-allowed" || art === "service-not-allowed"
+        ? "Erlaub den Mikrofonzugriff über das Symbol links in der Adresszeile. Kommt die Frage immer wieder, ist die Seite als Datei geöffnet, siehe Hinweis ganz oben."
+        : art === "network"
+        ? "Die Spracherkennung des Browsers braucht Internet. Tipp den Text so lange von Hand."
+        : "Versuch es noch einmal, oder tipp den Text von Hand ein.";
+      melde(ziel, "err", "Aufnahme nicht möglich", t);
+    };
+  }
+
+  /* ================= Ansicht: Aufnehmen ================= */
+  var feld = $("text"), meldung = $("meldung");
+  $("aufnahme").dataset.ruhe = "Aufnahme starten";
+
+  function zaehlen(s) { var t = s.trim(); return t ? t.split(/\s+/).length : 0; }
+
+  function aktualisiere() {
+    var n = zaehlen(feld.value);
+    $("zaehler").textContent = n === 1 ? "1 Wort" : n + " Wörter";
+    $("senden").disabled = n === 0;
+    try { ablage.setItem(ENTWURF, feld.value); } catch (e) {}
+  }
+  feld.addEventListener("input", aktualisiere);
+
+  $("leeren").addEventListener("click", function () {
+    if (!feld.value || confirm("Text wirklich löschen?")) {
+      feld.value = ""; aktualisiere(); stumm(meldung); bergen($("notausgang"));
+    }
+  });
+
+  var hauptDiktat = null;
+  if (Erkenner) {
+    hauptDiktat = new Diktat(feld, $("aufnahme"), $("aufnahmeText"), diktatFehler(meldung));
+    $("aufnahme").addEventListener("click", function () { stumm(meldung); hauptDiktat.umschalten(); });
+  } else {
+    bergen($("aufnahme"));
+    melde(meldung, "", "Dieser Browser kann nicht selbst zuhören.",
+      "Tipp den Text ins Feld, oder benutz das Diktat deines Geräts. Windows: Windows-Taste + H. Mac: Steuerungstaste zweimal drücken. Mit Chrome oder Edge funktioniert der Aufnahmeknopf.");
+  }
+
+  function zweistellig(n) { return (n < 10 ? "0" : "") + n; }
+  function stempelDatei() {
+    var d = new Date();
+    return d.getFullYear() + "-" + zweistellig(d.getMonth()+1) + "-" + zweistellig(d.getDate()) +
+           "-" + zweistellig(d.getHours()) + zweistellig(d.getMinutes()) + zweistellig(d.getSeconds());
+  }
+  function stempelLesbar() {
+    var d = new Date();
+    return zweistellig(d.getDate()) + "." + zweistellig(d.getMonth()+1) + "." + d.getFullYear() +
+           ", " + zweistellig(d.getHours()) + ":" + zweistellig(d.getMinutes());
+  }
+
+  $("senden").addEventListener("click", function () {
+    var inhalt = feld.value.trim();
+    if (!inhalt) return;
+    if (hauptDiktat) hauptDiktat.stoppen();
+
+    var name = stempelDatei() + ".md";
+    var knopf = $("senden");
+    knopf.disabled = true; knopf.textContent = "Wird gespeichert …";
+    melde(meldung, "", "Einen Moment …", "");
+
+    dateiSchreiben("inbox/" + name, inhalt, null, "Diktat " + name)
+      .then(function () {
+        melde(meldung, "ok", "✓ Gespeichert",
+          "Der Eintrag liegt jetzt als <code>inbox/" + name + "</code> im Repo.");
+        bergen($("notausgang"));
+        feld.value = "";
+        try { ablage.removeItem(ENTWURF); } catch (e) {}
+        aktualisiere();
+        inhalte = {}; eintraegeLaden().then(zeichneAlles).catch(function () {});
+      })
+      .catch(function (e) {
+        melde(meldung, "err", "⚠ Nicht gespeichert",
+          e.message + "<br><br><b>Dein Text ist nicht verloren.</b> Er steht weiter im Feld und wurde zwischengespeichert.");
+        zeigen($("notausgang"));
+      })
+      .then(function () {
+        knopf.disabled = false; knopf.textContent = "Ins Tagebuch speichern";
+        aktualisiere();
+      });
+  });
+
+  $("notausgang").addEventListener("click", function () {
+    var k = konfigLesen(), inhalt = feld.value.trim();
+    var ziel = (k.benutzer && k.repo)
+      ? "https://github.com/" + k.benutzer + "/" + k.repo + "/new/" + zweig + "?filename=inbox/" + stempelDatei() + ".md"
+      : "https://github.com";
+    kopiere(inhalt).then(function () {
+      melde(meldung, "ok", "Text kopiert.",
+        "GitHub öffnet sich in einem neuen Tab. Klick ins große Textfeld, füg den Text ein und klick unten auf <b>Commit changes</b>.");
+      window.open(ziel, "_blank", "noopener");
+    }).catch(function () {
+      melde(meldung, "err", "Kopieren hat nicht geklappt.",
+        "Markier den Text im Feld von Hand und kopier ihn mit Strg+C, am Mac Cmd+C.");
+    });
+  });
+
+  function kopiere(s) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(s);
+    return new Promise(function (ja, nein) {
+      feld.select();
+      try { document.execCommand("copy") ? ja() : nein(); } catch (e) { nein(e); }
+    });
+  }
+
+  /* ================= Vorschau aus Rohtext ================= */
+  function vorschau(text) {
+    var t = text.replace(/^---[\s\S]*?\n---\n/, "");     // Frontmatter weg
+    t = t.replace(/^#.*$/gm, "");                          // Ueberschriften weg
+    t = t.replace(/^>.*$/gm, "");                          // Rohdiktat-Zitate weg
+    t = t.replace(/^\s*-{3,}\s*$/gm, "");                  // Trennlinien weg
+    t = t.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+    return t || "(kein Text)";
+  }
+
+  /* ================= Ansicht: Kalender ================= */
+  (function () {
+    var kopf = $("wochentage");
+    WTAGE.forEach(function (w) {
+      var d = document.createElement("div"); d.className = "wtag"; d.textContent = w; kopf.appendChild(d);
+    });
+  })();
+
+  function proTag() {
+    var karte = {};
+    eintraege.forEach(function (e) { (karte[e.datum] = karte[e.datum] || []).push(e); });
+    return karte;
+  }
+
+  function zeichneKalender() {
+    var gitter = $("kalender"); gitter.innerHTML = "";
+    var jahr = monat.getFullYear(), m = monat.getMonth();
+    $("monatName").textContent = MONATE[m] + " " + jahr;
+
+    var karte = proTag();
+    var erster = new Date(jahr, m, 1);
+    var versatz = (erster.getDay() + 6) % 7;          // Montag = 0
+    var tage = new Date(jahr, m + 1, 0).getDate();
+    var heute = new Date();
+    var heuteIso = heute.getFullYear() + "-" + zweistellig(heute.getMonth()+1) + "-" + zweistellig(heute.getDate());
+
+    for (var v = 0; v < versatz; v++) {
+      var leer = document.createElement("div"); leer.className = "tag leer"; gitter.appendChild(leer);
+    }
+    for (var t = 1; t <= tage; t++) {
+      var iso = jahr + "-" + zweistellig(m + 1) + "-" + zweistellig(t);
+      var liste = karte[iso] || [];
+      var b = document.createElement("button");
+      b.className = "tag" + (liste.length ? " hat" : "") + (iso === heuteIso ? " heute" : "");
+      b.setAttribute("aria-pressed", gewaehlterTag === iso ? "true" : "false");
+      b.setAttribute("aria-label", t + ". " + MONATE[m] + ", " +
+        (liste.length ? liste.length + " Einträge" : "kein Eintrag"));
+      b.innerHTML = "<span>" + t + "</span>" +
+        (liste.length ? "<span class='zahl'>" + liste.length + "</span>" : "");
+      b.dataset.iso = iso;
+      b.addEventListener("click", function () {
+        gewaehlterTag = (gewaehlterTag === this.dataset.iso) ? null : this.dataset.iso;
+        zeichneKalender(); zeichneTagesliste();
+      });
+      gitter.appendChild(b);
+    }
+  }
+
+  $("monatZurueck").addEventListener("click", function () {
+    monat = new Date(monat.getFullYear(), monat.getMonth() - 1, 1); zeichneKalender();
+  });
+  $("monatVor").addEventListener("click", function () {
+    monat = new Date(monat.getFullYear(), monat.getMonth() + 1, 1); zeichneKalender();
+  });
+
+  function eintragKnopf(e, mitVorschau) {
+    var b = document.createElement("button");
+    b.className = "eintrag";
+    var marke = e.quelle === "inbox"
+      ? "<span class='marke roh'>noch nicht aufgeräumt</span>"
+      : "<span class='marke'>aufgeräumt</span>";
+    b.innerHTML = "<div class='kopf'><span>" + lesbaresDatum(e.datum) + "</span>" + marke + "</div>" +
+                  "<div class='vor' data-vor>" + (mitVorschau ? "…" : e.pfad.split("/").pop()) + "</div>";
+    b.addEventListener("click", function () { editorOeffnen(e); });
+    if (mitVorschau) {
+      dateiLaden(e.pfad).then(function (d) {
+        var el = b.querySelector("[data-vor]");
+        if (el) el.textContent = vorschau(d.text);
+      }).catch(function () {
+        var el = b.querySelector("[data-vor]");
+        if (el) el.textContent = "(konnte nicht geladen werden)";
+      });
+    }
+    return b;
+  }
+
+  function lesbaresDatum(iso) {
+    var p = iso.split("-");
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    var w = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"][d.getDay()];
+    return w + ", " + (+p[2]) + ". " + MONATE[+p[1] - 1] + " " + p[0];
+  }
+
+  function zeichneTagesliste() {
+    var ziel = $("tagesliste"); ziel.innerHTML = "";
+    if (!gewaehlterTag) {
+      ziel.innerHTML = "<p class='leerhinweis'>Tipp auf einen markierten Tag, um seine Einträge zu sehen.</p>";
+      return;
+    }
+    var liste = eintraege.filter(function (e) { return e.datum === gewaehlterTag; });
+    var h = document.createElement("h2");
+    h.textContent = lesbaresDatum(gewaehlterTag);
+    ziel.appendChild(h);
+    if (!liste.length) {
+      ziel.innerHTML += "<p class='leerhinweis'>An diesem Tag gibt es keinen Eintrag.</p>";
+      return;
+    }
+    liste.forEach(function (e) { ziel.appendChild(eintragKnopf(e, true)); });
+  }
+
+  /* ================= Ansicht: Liste ================= */
+  function zeichneListe() {
+    var ziel = $("volleListe"); ziel.innerHTML = "";
+    if (!eintraege.length) {
+      ziel.innerHTML = "<p class='leerhinweis'>Noch keine Einträge. Nimm den ersten auf.</p>";
+      return;
+    }
+    var letzterMonat = "";
+    eintraege.forEach(function (e) {
+      var m = e.datum.slice(0, 7);
+      if (m !== letzterMonat) {
+        letzterMonat = m;
+        var tr = document.createElement("div");
+        tr.className = "monatstrenner";
+        tr.textContent = MONATE[+m.slice(5, 7) - 1] + " " + m.slice(0, 4);
+        ziel.appendChild(tr);
+      }
+      ziel.appendChild(eintragKnopf(e, false));
+    });
+  }
+
+  function zeichneAlles() { zeichneKalender(); zeichneTagesliste(); zeichneListe(); }
+
+  /* ================= Editor ================= */
+  var bText = $("bearbeitenText"), eMeldung = $("editorMeldung");
+  var nachtragDiktat = null;
+  $("nachtragKnopf").dataset.ruhe = "Per Sprache ergänzen";
+
+  function editorZaehlen() {
+    var n = zaehlen(bText.value);
+    $("editorZaehler").textContent = (n === 1 ? "1 Wort" : n + " Wörter");
+  }
+  bText.addEventListener("input", editorZaehlen);
+
+  function editorOeffnen(e) {
+    offen = e;
+    stumm(eMeldung);
+    $("editorPfad").textContent = e.pfad;
+    bText.value = "";
+    bText.disabled = true;
+    $("editorSpeichern").disabled = true;
+    if (e.quelle === "inbox") {
+      melde($("editorHinweis"), "", "Rohdiktat",
+        "Dieser Eintrag ist noch nicht aufgeräumt. Was du hier ergänzt, nimmt Claude beim nächsten Durchgang mit.");
+    } else {
+      melde($("editorHinweis"), "", "Aufgeräumter Eintrag",
+        "Ein Sprach-Nachtrag wird oben vor dem Abschnitt Rohdiktat eingefügt. Das Rohdiktat selbst bleibt unangetastet.");
+    }
+    zeigen($("editor"));
+    document.body.style.overflow = "hidden";
+    $("editorZu").focus();
+
+    dateiLaden(e.pfad).then(function (d) {
+      bText.value = d.text;
+      bText.disabled = false;
+      $("editorSpeichern").disabled = false;
+      editorZaehlen();
+    }).catch(function (err) {
+      melde(eMeldung, "err", "Konnte nicht geladen werden", err.message);
+    });
+  }
+
+  function editorSchliessen() {
+    if (nachtragDiktat) nachtragDiktat.stoppen();
+    bergen($("editor"));
+    document.body.style.overflow = "";
+    offen = null;
+  }
+  $("editorZu").addEventListener("click", editorSchliessen);
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !$("editor").classList.contains("versteckt")) editorSchliessen();
+  });
+
+  if (Erkenner) {
+    nachtragDiktat = new Diktat(bText, $("nachtragKnopf"),
+      $("nachtragKnopf").querySelector("span:last-child"), diktatFehler(eMeldung));
+    $("nachtragKnopf").addEventListener("click", function () {
+      if (!nachtragDiktat.laeuft()) {
+        var vorher = bText.value.replace(/\s*$/, "");
+        bText.value = nachtragKopf(vorher);
+        bText.focus();
+        bText.setSelectionRange(bText.value.length, bText.value.length);
+      }
+      stumm(eMeldung);
+      nachtragDiktat.umschalten();
+    });
+  } else {
+    bergen($("nachtragKnopf"));
+  }
+
+  function nachtragKopf(alt) {
+    var block = "\n\n## Nachtrag " + stempelLesbar() + "\n\n";
+    var i = alt.indexOf("\n## Rohdiktat");
+    if (i === -1) return alt + block;
+    return alt.slice(0, i) + block + "\n" + alt.slice(i);
+  }
+
+  $("einfuegenKnopf").addEventListener("click", function () {
+    var pos = bText.selectionStart, s = "\n\n## Nachtrag " + stempelLesbar() + "\n\n";
+    bText.value = bText.value.slice(0, pos) + s + bText.value.slice(pos);
+    bText.focus();
+    bText.setSelectionRange(pos + s.length, pos + s.length);
+    editorZaehlen();
+  });
+
+  $("editorSpeichern").addEventListener("click", function () {
+    if (!offen) return;
+    if (nachtragDiktat) nachtragDiktat.stoppen();
+    var knopf = $("editorSpeichern");
+    knopf.disabled = true; knopf.textContent = "Wird gespeichert …";
+    melde(eMeldung, "", "Einen Moment …", "");
+
+    var sha = (inhalte[offen.pfad] || {}).sha || offen.sha;
+    dateiSchreiben(offen.pfad, bText.value, sha, "Eintrag ergänzt: " + offen.pfad)
+      .then(function () {
+        melde(eMeldung, "ok", "✓ Gespeichert", "Die Änderung liegt im Repo.");
+        return eintraegeLaden().then(zeichneAlles);
+      })
+      .catch(function (e) {
+        melde(eMeldung, "err", "⚠ Nicht gespeichert",
+          e.message + "<br><br><b>Dein Text steht weiter im Feld.</b> Kopier ihn zur Sicherheit heraus, bevor du das Fenster schließt.");
+      })
+      .then(function () { knopf.disabled = false; knopf.textContent = "Änderungen speichern"; });
+  });
+
+  /* ================= Reiter ================= */
+  var reiter = [["r-aufnehmen","a-aufnehmen"],["r-kalender","a-kalender"],["r-liste","a-liste"]];
+  reiter.forEach(function (paar) {
+    $(paar[0]).addEventListener("click", function () {
+      reiter.forEach(function (p) {
+        var an = p[0] === paar[0];
+        $(p[0]).setAttribute("aria-selected", an ? "true" : "false");
+        $(p[1]).classList.toggle("versteckt", !an);
+      });
+      if (paar[0] !== "r-aufnehmen" && !eintraege.length) neuLaden();
+    });
+  });
+
+  function neuLaden() {
+    $("volleListe").innerHTML = "<p class='lade'>Einträge werden geladen …</p>";
+    eintraegeLaden().then(zeichneAlles).catch(function (e) {
+      var t = "<p class='leerhinweis'>" + e.message + "</p>";
+      $("volleListe").innerHTML = t; $("tagesliste").innerHTML = t;
+    });
+  }
+
+  /* ================= Einstellungen ================= */
+  var k0 = konfigLesen();
+  $("benutzer").value = k0.benutzer || "";
+  $("repo").value = k0.repo || "";
+  $("token").value = k0.token || "";
+
+  $("speichern").addEventListener("click", function () {
+    var neu = { benutzer: $("benutzer").value.trim(),
+                repo: $("repo").value.trim(),
+                token: $("token").value.trim() };
+    if (!konfigOk(neu)) { melde(meldung, "err", "Es fehlt noch etwas.", "Bitte alle drei Felder ausfüllen."); return; }
+    try { ablage.setItem(SPEICHER, JSON.stringify(neu)); } catch (e) {}
+    inhalte = {}; zweig = "main";
+    melde(meldung, "ok", "Einstellungen gesichert.",
+      ablage._fluechtig
+        ? "Achtung: Dieser Browser speichert nichts dauerhaft. Nach dem Neuladen musst du die Felder erneut ausfüllen."
+        : "Ab jetzt musst du nur noch sprechen und speichern.");
+    if (!ablage._fluechtig) {
+      bergen($("einstellungen"));
+      $("umschalten").textContent = "Einstellungen anzeigen";
+    }
+    neuLaden();
+  });
+
+  $("umschalten").addEventListener("click", function () {
+    var zu = $("einstellungen").classList.toggle("versteckt");
+    this.textContent = zu ? "Einstellungen anzeigen" : "Einstellungen ausblenden";
+    if (!zu) $("einstellungen").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  /* ================= Start ================= */
+  if (location.protocol === "file:") {
+    zeigen($("dateiwarnung"));
+    if (Erkenner) bergen($("aufnahme"));
+  }
+
+  try {
+    var e0 = ablage.getItem(ENTWURF);
+    if (e0 && e0.trim()) {
+      feld.value = e0;
+      melde(meldung, "", "Zwischengespeicherter Text wiederhergestellt.",
+        "Vom letzten Mal ist noch etwas übrig. Speichern oder löschen, wie du magst.");
+    }
+  } catch (e) {}
+
+  if (konfigOk(konfigLesen())) { bergen($("einstellungen")); neuLaden(); }
+  else { $("umschalten").textContent = "Einstellungen ausblenden"; }
+
+  aktualisiere();
+  zeichneKalender();
+  zeichneTagesliste();
+})();
+</script>
+</body>
+</html>

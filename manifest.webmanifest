@@ -1,0 +1,17 @@
+{
+  "name": "Tagebuch",
+  "short_name": "Tagebuch",
+  "description": "Sprach-Tagebuch: aufnehmen, nachlesen, ergänzen.",
+  "lang": "de",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfaf8",
+  "theme_color": "#8a3a12",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
